@@ -69,5 +69,3 @@ PLOT (BAR(category_column, value_column) | LINE(x_column, y_column) | SCATTER(x_
 
 <alphabetic> ::= "A" | ... | "Z" | "a" | ... | "z"
 ```
-# spl-parser
-# spl-parser
