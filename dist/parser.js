@@ -1,24 +1,20 @@
-import { AggregationFunction, LimitAndOffset, PlotFunction, Token, TokenType, SPLQuery, PlotClause, ColumnMetadata, WhereCondition, BarPlotCall, PointPlotCall } from './types';
-import { Lexer } from './lexer';
-import { SPLError } from './exceptions';
-
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.Parser = void 0;
+const exceptions_1 = require("./exceptions");
 /**
  * Parser for SPL queries
  */
-export class Parser {
-    private _lexer: Lexer;
-    private _currentToken: Token;
-
-    constructor(lexer: Lexer) {
+class Parser {
+    constructor(lexer) {
         this._lexer = lexer;
         this._currentToken = this._lexer.nextToken();
     }
-
-   /**
-    * Parses the SPL query into a syntax tree
-    * @returns AST of the SPL query
-    */
-    public parse(): SPLQuery {
+    /**
+     * Parses the SPL query into a syntax tree
+     * @returns AST of the SPL query
+     */
+    parse() {
         const plotClause = this._consumePlotClauseOptional();
         const selectColumns = this._consumeSelectClause();
         const whereCondition = this._consumeWhereClauseOptional();
@@ -33,26 +29,24 @@ export class Parser {
             limitAndOffset
         };
     }
-
-    private _consumePlotClauseOptional(): PlotClause | undefined {
+    _consumePlotClauseOptional() {
         if (this._currentToken.value !== "PLOT") {
             return undefined;
         }
         this._consumeToken("KEYWORD", "PLOT");
-        const plotFunction = <PlotFunction>this._consumeToken("PLOT_FUNCTION").value;
+        const plotFunction = this._consumeToken("PLOT_FUNCTION").value;
         this._consumeToken("LPAREN");
         const plotClause = this._consumePlotArgs(plotFunction);
         this._consumeToken("RPAREN");
         return plotClause;
     }
-
-    private _consumePlotArgs(plotFunction: PlotFunction): PlotClause {
+    _consumePlotArgs(plotFunction) {
         switch (plotFunction) {
             case "BAR":
                 const categoriesToken = this._consumeToken("IDENTIFIER");
                 this._consumeToken("COMMA");
                 const valuesToken = this._consumeToken("IDENTIFIER");
-                return <BarPlotCall> {
+                return {
                     plotFunction,
                     categoriesIdentifier: categoriesToken.value,
                     valuesIdentifier: valuesToken.value
@@ -62,69 +56,62 @@ export class Parser {
                 const xToken = this._consumeToken("IDENTIFIER");
                 this._consumeToken("COMMA");
                 const yToken = this._consumeToken("IDENTIFIER");
-                return <PointPlotCall> {
+                return {
                     plotFunction,
                     xIdentifier: xToken.value,
                     yIdentifier: yToken.value
-                }
+                };
             default:
-                throw new SPLError(`Invalid plot type ${plotFunction}`);
+                throw new exceptions_1.SPLError(`Invalid plot type ${plotFunction}`);
         }
     }
-
-    private _consumeSelectClause(): ColumnMetadata[] {
+    _consumeSelectClause() {
         this._consumeToken("KEYWORD", "SELECT");
         const selectColumns = [];
         do {
             selectColumns.push(this._consumeColumn());
             this._consumeToken("COMMA");
-        } while (this._currentToken.type !== "IDENTIFIER")
+        } while (this._currentToken.type !== "IDENTIFIER");
         return selectColumns;
     }
-
-    private _consumeColumn(): ColumnMetadata {
-        let column: string | undefined = undefined;
-        let aggregationFunction: AggregationFunction | undefined = undefined;
-
+    _consumeColumn() {
+        let column = undefined;
+        let aggregationFunction = undefined;
         if (this._currentToken.type === "AGGREGATION_FUNCTION") {
-            aggregationFunction = <AggregationFunction>this._consumeToken("AGGREGATION_FUNCTION").value;
+            aggregationFunction = this._consumeToken("AGGREGATION_FUNCTION").value;
             this._consumeToken("LPAREN");
             if (aggregationFunction !== "COUNT") {
                 column = this._consumeToken("IDENTIFIER").value;
             }
             this._consumeToken("RPAREN");
-        } else {
+        }
+        else {
             column = this._consumeToken("IDENTIFIER").value;
         }
-
         let identifier = undefined;
         if (this._currentToken.value === "AS") {
             this._consumeToken("KEYWORD");
             identifier = this._consumeToken("IDENTIFIER").value;
         }
-
         if (!identifier) {
             if (aggregationFunction) {
-                identifier = `${aggregationFunction}(${column ?? ""})`
-            } else {
-                identifier = column!;
+                identifier = `${aggregationFunction}(${column !== null && column !== void 0 ? column : ""})`;
+            }
+            else {
+                identifier = column;
             }
         }
-
-        return { identifier, column, aggregationFunction }
+        return { identifier, column, aggregationFunction };
     }
-
-    private _consumeWhereClauseOptional(): WhereCondition | undefined {
+    _consumeWhereClauseOptional() {
         if (this._currentToken.value !== "WHERE") {
             return undefined;
         }
         this._consumeToken("KEYWORD");
         return this._consumeCondition();
     }
-
-    private _consumeCondition(): WhereCondition {
-        const filters: WhereCondition[] = [];
-
+    _consumeCondition() {
+        const filters = [];
         while (true) {
             const innerConditions = [this._consumeConditionGroup()];
             while (this._currentToken.value === "AND") {
@@ -140,15 +127,12 @@ export class Parser {
             }
             this._currentToken = this._lexer.nextToken();
         }
-
         if (filters.length === 1) {
             return filters[0];
         }
-
         return { or: filters };
     }
-
-    private _consumeConditionGroup(): WhereCondition {
+    _consumeConditionGroup() {
         if (this._currentToken.type === "IDENTIFIER") {
             return this._consumeComparison();
         }
@@ -157,11 +141,9 @@ export class Parser {
         this._consumeToken("RPAREN");
         return condition;
     }
-
-    private _consumeComparison(): WhereCondition {
+    _consumeComparison() {
         const key = this._consumeToken("IDENTIFIER").value;
         const comparisonOperator = this._consumeToken("COMPARISON_OPERATOR").value;
-
         let value;
         switch (comparisonOperator) {
             case ">":
@@ -181,19 +163,17 @@ export class Parser {
             case "!=":
                 return { neq: { key, value: this._consumeComparisonValue() } };
             default:
-                throw new SPLError(`Invalid comparison operator ${comparisonOperator}`)
+                throw new exceptions_1.SPLError(`Invalid comparison operator ${comparisonOperator}`);
         }
     }
-
-    private _consumeGroupByClauseOptional(): string | undefined {
+    _consumeGroupByClauseOptional() {
         if (this._currentToken.value !== "GROUPBY") {
             return undefined;
         }
         this._consumeToken("KEYWORD");
         return this._consumeToken("IDENTIFIER").value;
     }
-
-    private _consumeLimitAndOffsetClauseOptional(): LimitAndOffset | undefined {
+    _consumeLimitAndOffsetClauseOptional() {
         if (this._currentToken.value !== "LIMIT") {
             return undefined;
         }
@@ -206,18 +186,17 @@ export class Parser {
         const offset = Number(this._consumeToken("NUMBER").value);
         return { limit, offset };
     }
-
-    private _consumeToken(tokenType: TokenType, value?: string): Token {
+    _consumeToken(tokenType, value) {
         const token = this._currentToken;
         if (token.type === tokenType && (!value || token.value === value)) {
             this._currentToken = this._lexer.nextToken();
             return token;
-        } else {
-            throw new SPLError(`Unexpected token ${JSON.stringify(this._currentToken)} at position ${this._lexer.currentPosition}`)
+        }
+        else {
+            throw new exceptions_1.SPLError(`Unexpected token ${JSON.stringify(this._currentToken)} at position ${this._lexer.currentPosition}`);
         }
     }
-
-    private _consumeComparisonValue(): string | number | null {
+    _consumeComparisonValue() {
         const token = this._currentToken;
         this._currentToken = this._lexer.nextToken();
         switch (token.type) {
@@ -228,8 +207,8 @@ export class Parser {
             case "NULL":
                 return null;
             default:
-                throw new SPLError("Equal comparison allowed only for string, number, and null");
+                throw new exceptions_1.SPLError("Equal comparison allowed only for string, number, and null");
         }
     }
 }
-
+exports.Parser = Parser;
